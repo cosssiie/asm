@@ -1,0 +1,24 @@
+{
+    "masmtasm.ASM.mode": "workspace", 
+
+    "masmtasm.ASM.actions": {
+        "TASM": {
+            "baseBundle": "<built-in>/TASM.jsdos",
+            "before": [
+                "set PATH=C:\\TASM"
+            ],
+            "run": [
+                "TASM ${file}",
+                "TLINK ${filename}",
+                ">${filename}"
+            ],
+            "debug": [
+                "TASM /zi ${file}",
+                "TLINK /v/3 ${filename}.obj",
+                "copy C:\\TASM\\TDC2.TD TDCONFIG.TD",
+                "TD -cTDCONFIG.TD ${filename}.exe"
+            ]
+        },
+    
+    }
+}
