@@ -10,7 +10,7 @@
             "run": [
                 "TASM ${file}",
                 "TLINK ${filename}",
-                ">${filename}"
+                ">${filename} < test.in"
             ],
             "debug": [
                 "TASM /zi ${file}",
