@@ -2,31 +2,56 @@
 .stack 100h
 
 .data
-buffer db 256 dup (?)  ; Буфер для зберігання введеного рядка
-prompt db 'Write a message: $'  ; Повідомлення для користувача
+filename db 'test.in', 0
+buffer db 255 dup(?) ; Буфер для зберігання прочитаних символів
 
 .code
-start:
+main proc
     mov ax, @data
     mov ds, ax
 
-    ; Виведення повідомлення для користувача
-    mov ah, 09h         
-    lea dx, prompt      
-    int 21h             ; Виклик DOS для виведення повідомлення
+    ; Відкриття файлу для читання
+    mov ah, 3dh
+    lea dx, filename
+    mov al, 0 ; Режим читання
+    int 21h
+    jc file_error ; Перевірка помилки відкриття файлу
+    mov bx, ax ; Збереження дескриптора файлу
 
-    ; Зчитування рядка з клавіатури
-    mov ah, 01h   
-    lea dx, buffer      
-    int 21h       ; Виклик DOS для введення символу
+read_loop:
+    ; Читання з файлу в буфер
+    mov ah, 3fh
+    mov cx, 255 ; Максимальна довжина для читання
+    lea dx, buffer
+    int 21h
+    ; Перевірка на кінець файлу або помилку читання
+    jc file_error
+    jz file_end
 
-    ; Виведення введеного символу на екран
-    mov ah, 02h         
-    mov dl, byte ptr [buffer]  
-    int 21h             ; Виклик DOS для виведення символу
+    ; Виведення прочитаного тексту на екран
+    mov ah, 09h
+    lea dx, buffer
+    int 21h
+    jmp read_loop
 
-    ; Завершення програми
-    mov ah, 4Ch         ; DOS function for program termination
-    int 21h             ; Виклик DOS для завершення програми
+file_end:
+    ; Закриття файлу
+    mov ah, 3eh
+    mov bx, bx ; Завантаження дескриптора файлу у BX
+    int 21h
 
-end start
+    jmp exit_program
+
+file_error:
+    mov ah, 09h
+    lea dx, file_error_msg
+    int 21h
+
+exit_program:
+    mov ah, 4ch
+    int 21h
+
+file_error_msg db 'File error!', 0
+
+main endp
+end main
