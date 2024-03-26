@@ -3,9 +3,10 @@
 
 .data
 filename db 'test.in', 0
-buffer db 255 dup(?) ; Буфер для зберігання прочитаних символів
+buffer db 256 dup(?) ; Буфер для зберігання прочитаних символів
 substring db 'a', 0 ; Підрядок, який потрібно знайти
 count dw ? ; Лічильник входжень підрядка
+count_msg db 'Count of substring: $'
 
 .code
 main proc
@@ -26,14 +27,25 @@ main proc
 read_loop:
     ; Читання з файлу в буфер
     mov ah, 3fh
-    mov cx, 255 ; Максимальна довжина для читання
+    mov cx, 256 ; Максимальна довжина для читання
     lea dx, buffer
     int 21h
     ; Перевірка на кінець файлу або помилку читання
     jc file_error
     jz file_end
 
-    ; Пошук та підрахунок підрядка в буфері
+    ; Перевірка на символ кінця рядка
+    mov si, offset buffer
+    mov di, cx
+    dec di
+    mov al, [si] ; Отримати перший символ у буфері
+    add si, di   ; Збільшити адресу на значення в di
+    cmp al, 0Dh ; Перевірка на символ '\r'
+    je end_of_line
+    cmp al, 0Ah ; Перевірка на символ '\n'
+    je end_of_line
+
+    ; Якщо це не кінець рядка, продовжуємо обробку
     call find_and_count_substring
 
     ; Виведення прочитаного тексту на екран
@@ -41,6 +53,10 @@ read_loop:
     lea dx, buffer
     int 21h
     jmp read_loop
+
+end_of_line:
+    ; Обробка кінця рядка
+    jmp read_loop ; Пропускаємо обробку рядка і переходимо до наступного рядка
 
 file_end:
     ; Закриття файлу
@@ -56,9 +72,8 @@ file_end:
     mov ax, count
     call print_word
 
-    jmp exit_program
-
 file_error:
+    ; Обробка помилки читання файлу
     mov ah, 09h
     lea dx, file_error_msg
     int 21h
@@ -68,7 +83,6 @@ exit_program:
     int 21h
 
 file_error_msg db 'Помилка файлу!', 0
-count_msg db 'Кількість підрядків: $'
 
 find_and_count_substring proc
     mov si, offset buffer ; Вказівник на початок буфера
@@ -84,6 +98,8 @@ find_next:
     cmp al, ah ; Порівнюємо символ з буфера з поточним символом підрядка
     jne mismatch
     inc di ; Переходимо до наступного символу підрядка
+    cmp di, offset substring + 1 ; Перевіряємо, чи досягли кінця підрядка
+    je found_substring ; Якщо досягнуто, це означає, що підрядок знайдено
     jmp check_substring
 
 mismatch:
@@ -107,7 +123,6 @@ found_substring:
 end_find_next:
     add count, cx ; Додаємо кількість входжень підрядка в поточному буфері до загального лічильника
     ret
-
 find_and_count_substring endp
 
 print_word proc
