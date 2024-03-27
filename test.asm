@@ -1,143 +1,111 @@
-.model small
-.stack 100h
+.MODEL SMALL
+.STACK 100H
+.DATA
+    filename DB 'test.in', 0
+    VAR DB 100 DUP('$')
+    substring DB 'aa', 0 ; Підрядок, який ми шукаємо
+    count_msg DB 'Count of substrings: $'
 
-.data
-filename db 'test.in', 0
-buffer db 256 dup(?) ; Буфер для зберігання прочитаних символів
-substring db 'aaa', 0 ; Підрядок, який потрібно знайти
-count_msg db 'Count of substring: $'
-line_index dw 0 ; Індекс поточного рядка у файлі
-count dw 0 ; Лічильник входжень підрядка у поточному рядку
-
-.code
-main proc
-    mov ax, @data
-    mov ds, ax
+.CODE
+MAIN PROC
+    MOV AX, @DATA
+    MOV DS, AX
 
     ; Відкриття файлу для читання
-    mov ah, 3dh
-    lea dx, filename
-    mov al, 0 ; Режим читання
-    int 21h
-    jc file_error ; Перевірка помилки відкриття файлу
-    mov bx, ax  
+    MOV AH, 3DH ; Код операції відкриття файлу
+    MOV AL, 0 ; Режим читання
+    LEA DX, filename ; Адреса рядка з ім'ям файлу
+    INT 21H ; Виклик преривання DOS
 
-    ; Читання та обробка рядків у файлі
-read_loop:
-    ; Читання з файлу в буфер
-    mov ah, 3fh
-    mov cx, 256 ; Максимальна довжина для читання
-    lea dx, buffer
-    int 21h
-    ; Перевірка на кінець файлу або помилку читання
-    jc file_error
-    jz file_end
+    MOV BX, AX ; Зберігання дескриптору відкритого файлу
 
-    ; Підрахунок кількості підстрічок у поточному рядку
-    mov si, offset buffer
-    mov count, 0 ; Обнулення лічильника входжень у поточному рядку
-    call find_and_count_substring
+    ; Читання з файлу
+    MOV AH, 3FH ; Код операції читання з файлу
+    LEA DX, VAR ; Адреса масиву, куди буде зчитано з файлу
+    MOV CX, 100 ; Кількість байт для читання
+    INT 21H ; Виклик преривання DOS
 
-    ; Вивід результатів для поточного рядка
-    mov ah, 09h
-    lea dx, count_msg
-    int 21h
-    mov ax, count
-    call print_word
-    mov ax, line_index
-    call print_word
-    mov ah, 02h
-    mov dl, 0Dh ; Перехід на новий рядок
-    int 21h
-    mov dl, 0Ah
-    int 21h
+    ; Пошук підрядка та виведення кількості знайдених підрядків
+    MOV SI, OFFSET VAR ; Початок тексту
+    MOV DI, OFFSET substring ; Початок підрядка
+    MOV CX, 0 ; Лічильник знайдених підрядків
+    
+inner_loop:
+    MOV AX, DX ; Завантаження вмісту регістра DX в AX
+    MOV AL, AH ; Завантаження молодшого байта з AX в AL    CMP AL, 0 ; Перевірка на кінець рядка
+    JE end_search ; Якщо досягнуто кінець рядка, завершити пошук
+    MOV AL, [SI] ; Завантаження наступного символу підрядка
+    CMP AL, 0 ; Перевірка на кінець підрядка
+    JE substring_found ; Якщо досягнуто кінець підрядка, підрядок знайдено
+CMP BYTE PTR [SI], AL ; Порівняння символів підрядка та тексту
+    JNE not_found ; Якщо символи не збігаються, перейти до наступного символу тексту
+    INC SI ; Перехід до наступного символу тексту
+    INC DX ; Перехід до наступного символу тексту
+    JMP inner_loop ; Повторити цикл порівняння символів
+substring_found:
+    INC CX ; Збільшення лічильника знайдених підрядків
+    INC SI ; Перехід до наступного символу у тексті
+    INC DX ; Перехід до наступного символу у файлі
+    JMP inner_loop ; Повторення внутрішнього циклу
 
-    inc line_index ; Збільшення індексу рядка
-    jmp read_loop
+not_found:
+    INC SI ; Перехід до наступного символу у тексті
+    INC DX ; Перехід до наступного символу у файлі
+    JMP inner_loop ; Повторення внутрішнього циклу
 
-file_end:
+end_search:
+    ; Виведення кількості знайдених підрядків
+    MOV AH, 09H ; Код операції виведення рядка
+    LEA DX, count_msg ; Адреса рядка
+    INT 21H ; Виклик преривання DOS
+
+    MOV AX, CX ; Переміщення кількості підрядків у регістр AX
+    CALL print_word ; Виклик підпрограми виведення числа
+
     ; Закриття файлу
-    mov ah, 3eh
-    mov bx, bx 
-    int 21h
+    MOV AH, 3EH ; Код операції закриття файлу
+    MOV BX, BX ; BX містить дескриптор файлу
+    INT 21H ; Виклик преривання DOS
+
+    JMP exit_program ; Перехід до завершення програми
 
 exit_program:
-    mov ah, 4ch
-    int 21h
+    MOV AH, 4CH ; Код операції завершення програми
+    INT 21H ; Виклик преривання DOS
 
-file_error:
-    ; Обробка помилки читання файлу
-    mov ah, 09h
-    lea dx, file_error_msg
-    int 21h
-    jmp exit_program
+print_word PROC
+    ; Підпрограма для виведення 16-бітного числа (збереженого в регістрі AX) на екран
+    PUSH AX ; Збереження регістра AX у стеку
+    PUSH BX ; Збереження регістра BX у стеку
+    PUSH CX ; Збереження регістра CX у стеку
+    PUSH DX ; Збереження регістра DX у стеку
 
-file_error_msg db 'Помилка файлу!', 0
+    MOV CX, 10 ; Основа для десяткового числа
+    XOR BX, BX ; Очистка регістру BX
 
-find_and_count_substring proc
-    mov di, offset substring ; Вказівник на початок підрядка
-    mov cx, 0 ; Лічильник входжень підрядка в поточному рядку
-
-find_next:
-    ; Пошук підрядка в буфері
-    mov ah, [di] ; Завантажуємо поточний символ підрядка
-    cmp ah, 0 ; Перевіряємо, чи досягнутий кінець підрядка
-    je end_find_next
-    lodsb ; Завантажуємо поточний символ з буфера
-    cmp al, ah ; Порівнюємо символ з буфера з поточним символом підрядка
-    jne mismatch
-    inc di ; Переходимо до наступного символу підрядка
-    cmp di, offset substring + 1 ; Перевіряємо, чи досягли кінця підрядка
-    je found_substring ; Якщо досягнуто, це означає, що підрядок знайдено
-    jmp check_substring
-
-mismatch:
-    mov di, offset substring ; Повертаємо вказівник на початок підрядка
-    inc si ; Переходимо до наступного символу у буфері
-    jmp find_next
-
-check_substring:
-    mov ah, [di] ; Завантажуємо поточний символ підрядка
-    cmp ah, 0 ; Перевіряємо, чи досягнутий кінець підрядка
-    je found_substring ; Якщо досягнуто, це означає, що підрядок знайдено
-    lodsb ; Завантажуємо наступний символ з буфера
-    cmp al, ah ; Порівнюємо символи
-    jne mismatch ; Якщо символи не збігаються, переходимо до пошуку наступного входження
-
-found_substring:
-    inc cx ; Збільшуємо лічильник входжень
-    mov di, offset substring ; Повертаємо вказівник на початок підрядка
-    jmp find_next
-    
-end_find_next:
-    add count, cx ; Додаємо кількість входжень підрядка у поточному рядку до загального лічильника
-    ret
-find_and_count_substring endp
-
-print_word proc
-    push ax
-    push dx
-
-    mov dx, 0
-    mov cx, 10
 next_digit:
-    xor dx, dx
-    div cx
-    add dl, '0'
-    push dx
-    test ax, ax
-    jnz next_digit
+    XOR DX, DX ; Очистка регістру DX
+    DIV CX ; Ділення AX на 10, результат у AX, остача у DX
+    ADD DL, '0' ; Перетворення остачі у символ
+    PUSH DX ; Збереження символу у стеку
+    INC BX ; Збільшення лічильника цифр
+
+    TEST AX, AX ; Перевірка, чи результат ділення ще не нуль
+    JNZ next_digit ; Якщо так, продовжити обчислення
 
 print_loop:
-    pop dx
-    mov ah, 02h
-    int 21h
-    loop print_loop
+    POP DX ; Вилучення цифри зі стеку
+    MOV AH, 2 ; Функція виводу символу
+    INT 21H ; Виклик преривання DOS
+    LOOP print_loop ; Повторити, доки є цифри
 
-    pop dx
-    pop ax
-    ret
-print_word endp
+    POP DX ; Відновлення регістру DX
+    POP CX ; Відновлення регістру CX
+    POP BX ; Відновлення регістру BX
+    POP AX ; Відновлення регістру AX
 
-main endp
-end main
+    RET ; Повернення з підпрограми
+print_word ENDP
+
+MAIN ENDP
+END MAIN
