@@ -4,9 +4,10 @@
 .data
 filename db 'test.in', 0
 buffer db 256 dup(?) ; Буфер для зберігання прочитаних символів
-substring db 'a', 0 ; Підрядок, який потрібно знайти
-count dw ? ; Лічильник входжень підрядка
+substring db 'aaa', 0 ; Підрядок, який потрібно знайти
 count_msg db 'Count of substring: $'
+line_index dw 0 ; Індекс поточного рядка у файлі
+count dw 0 ; Лічильник входжень підрядка у поточному рядку
 
 .code
 main proc
@@ -21,9 +22,7 @@ main proc
     jc file_error ; Перевірка помилки відкриття файлу
     mov bx, ax  
 
-    ; Ініціалізація лічильника
-    mov count, 0
-
+    ; Читання та обробка рядків у файлі
 read_loop:
     ; Читання з файлу в буфер
     mov ah, 3fh
@@ -34,29 +33,27 @@ read_loop:
     jc file_error
     jz file_end
 
-    ; Перевірка на символ кінця рядка
+    ; Підрахунок кількості підстрічок у поточному рядку
     mov si, offset buffer
-    mov di, cx
-    dec di
-    mov al, [si] ; Отримати перший символ у буфері
-    add si, di   ; Збільшити адресу на значення в di
-    cmp al, 0Dh ; Перевірка на символ '\r'
-    je end_of_line
-    cmp al, 0Ah ; Перевірка на символ '\n'
-    je end_of_line
-
-    ; Якщо це не кінець рядка, продовжуємо обробку
+    mov count, 0 ; Обнулення лічильника входжень у поточному рядку
     call find_and_count_substring
 
-    ; Виведення прочитаного тексту на екран
+    ; Вивід результатів для поточного рядка
     mov ah, 09h
-    lea dx, buffer
+    lea dx, count_msg
     int 21h
-    jmp read_loop
+    mov ax, count
+    call print_word
+    mov ax, line_index
+    call print_word
+    mov ah, 02h
+    mov dl, 0Dh ; Перехід на новий рядок
+    int 21h
+    mov dl, 0Ah
+    int 21h
 
-end_of_line:
-    ; Обробка кінця рядка
-    jmp read_loop ; Пропускаємо обробку рядка і переходимо до наступного рядка
+    inc line_index ; Збільшення індексу рядка
+    jmp read_loop
 
 file_end:
     ; Закриття файлу
@@ -64,30 +61,22 @@ file_end:
     mov bx, bx 
     int 21h
 
-    ; Виведення кількості знайдених підрядків
-    mov ah, 09h
-    lea dx, count_msg
+exit_program:
+    mov ah, 4ch
     int 21h
-
-    mov ax, count
-    call print_word
 
 file_error:
     ; Обробка помилки читання файлу
     mov ah, 09h
     lea dx, file_error_msg
     int 21h
-
-exit_program:
-    mov ah, 4ch
-    int 21h
+    jmp exit_program
 
 file_error_msg db 'Помилка файлу!', 0
 
 find_and_count_substring proc
-    mov si, offset buffer ; Вказівник на початок буфера
     mov di, offset substring ; Вказівник на початок підрядка
-    mov cx, 0 ; Лічильник входжень підрядка в поточному буфері
+    mov cx, 0 ; Лічильник входжень підрядка в поточному рядку
 
 find_next:
     ; Пошук підрядка в буфері
@@ -119,9 +108,9 @@ found_substring:
     inc cx ; Збільшуємо лічильник входжень
     mov di, offset substring ; Повертаємо вказівник на початок підрядка
     jmp find_next
-
+    
 end_find_next:
-    add count, cx ; Додаємо кількість входжень підрядка в поточному буфері до загального лічильника
+    add count, cx ; Додаємо кількість входжень підрядка у поточному рядку до загального лічильника
     ret
 find_and_count_substring endp
 
