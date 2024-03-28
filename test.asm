@@ -2,9 +2,10 @@
 .stack 100h
 
 .data
-substring db 'a', 0 ; Підрядок, який потрібно знайти
+substring db 'aa', 0 ; Підрядок, який потрібно знайти
 filename db 'test.in', 0
 buffer db 255 dup(?) ; Буфер для зберігання прочитаних символів
+result_array dw 100 dup(?) ; Масив для зберігання результатів
 count dw ? ; Лічильник входжень підрядка
 count_msg db '$'
 newline db 0Dh, 0Ah, '$' ; Перехід на новий рядок для виведення
@@ -21,10 +22,6 @@ main proc
 
     jc file_error ; Перевірка помилки відкриття файлу
     mov bx, ax  
-    ; Ініціалізація лічильника
-    mov count, 0
-
-    mov cx, 0 ; Лічильник рядків
 
 read_loop:
     ; Читання з файлу в буфер
@@ -38,29 +35,18 @@ read_loop:
     cmp ax, 0 ; Перевірка на кінець файлу
     je file_end
 
-    ; Перевірка на символ кінця рядка
-    mov si, offset buffer
-    mov di, cx
-    dec di
-    mov al, [si] ; Отримати перший символ у буфері
-    add si, di   ; Збільшити адресу на значення в di
-    cmp al, 0Dh ; Перевірка на символ '\r'
-    je end_of_line
-    cmp al, 0Ah ; Перевірка на символ '\n'
-    je end_of_line
-
-    ; Якщо це не кінець рядка, продовжуємо обробку
+    ; Пошук підрядка в поточному буфері та підрахунок кількості входжень
     call find_and_count_substring
-    jmp read_loop
 
-    ; Виведення прочитаного тексту на екран
-end_of_line:
-    mov ah, 09h
-    lea dx, buffer
-    int 21h
+    ; Збереження результатів в масиві
+    mov ax, count
+    mov result_array, ax ; Зберігаємо кількість входжень підрядка
+    mov ax, cx
+    mov result_array[2], ax ; Зберігаємо номер рядка
 
-    ; Збільшення лічильника рядків
-    inc cx
+    ; Перехід до наступного результату в масиві
+    add result_array, 4 ; Розміщення наступного результату в масиві
+
     jmp read_loop
 
 file_end:
@@ -68,17 +54,11 @@ file_end:
     mov ah, 3eh
     int 21h
 
-    ; Виведення кількості знайдених підрядків
-    mov ah, 09h
-    lea dx, count_msg
-    int 21h
-    mov ax, count
-    call print_word
+    ; Сортування результатів за кількістю входжень підрядка
+    call bubble_sort
 
-    ; Перехід на новий рядок
-    mov ah, 09h
-    lea dx, newline
-    int 21h
+    ; Виведення відсортованих результатів
+    jmp print_sorted_results
 
     jmp exit_program
 
@@ -95,11 +75,11 @@ exit_program:
 file_error_msg db 'Помилка файлу!', 0
 
 find_and_count_substring proc
-    ; Пошук підрядка в буфері
+    ; Пошук підрядка в буфері та підрахунок кількості входжень
+    xor cx, cx ; Очищуємо лічильник входжень
     mov si, offset buffer ; Вказівник на початок буфера
     mov di, offset substring ; Вказівник на початок підрядка
-    mov cx, 0 ; Лічильник входжень підрядка в поточному буфері
-    
+
 find_next:
     mov ah, [di] ; Завантажуємо поточний символ підрядка
     cmp ah, 0 ; Перевіряємо, чи досягнутий кінець підрядка
@@ -128,25 +108,71 @@ check_substring:
 
 found_substring:
     inc cx ; Збільшуємо лічильник входжень
-    mov di, offset substring ; Повертаємо вказівник на початок підрядка
-    jmp end_find_next
+    jmp find_next
 
 end_find_next:
-    add count, cx ; Додаємо кількість входжень підрядка в поточному буфері до загального лічильника
+    mov count, cx ; Зберігаємо кількість знайдених входжень в лічильнику
     ret
 
 find_and_count_substring endp
 
+bubble_sort proc
+    ; Сортування масиву result_array методом бульбашкового сортування
+    mov cx, 100 ; Кількість елементів у масиві
+    mov si, offset result_array ; Початок масиву
+outer_loop:
+    dec cx ; Зменшуємо лічильник
+    jz done_sorting ; Якщо лічильник став нульовим, сортування завершено
+    mov di, si ; Копіюємо початкову адресу масиву в di
+    mov ax, [di] ; Завантажуємо перший елемент масиву
+inner_loop:
+    cmp ax, [di + 4] ; Порівнюємо поточний елемент з наступним
+    jbe not_swap ; Якщо поточний елемент менший або рівний наступному, не проводимо обмін
+    xchg ax, [di + 4] ; Якщо поточний елемент більший за наступний, проводимо обмін
+    mov [di], ax ; Зберігаємо результат обміну в поточному місці масиву
+not_swap:
+    add di, 4 ; Переходимо до наступного елементу
+    loop inner_loop ; Повторюємо внутрішній цикл, поки не пройдемо всі елементи
+    jmp outer_loop ; Повторюємо зовнішній цикл
+done_sorting:
+    ret
+
+bubble_sort endp
+
+print_sorted_results proc
+    ; Виведення відсортованих результатів
+    mov cx, 100 ; Кількість елементів у масиві
+    mov si, offset result_array ; Початок масиву
+printing_loop:
+    cmp cx, 0 ; Перевірка на кінець масиву
+    je print_done ; Якщо кінець масиву, завершуємо виведення
+    mov ax, [si] ; Завантажуємо кількість входжень підрядка
+    call print_word ; Виводимо кількість входжень
+    mov dx, offset count_msg ; Виводимо роздільник
+    mov ah, 09h
+    int 21h
+    mov ax, [si + 2] ; Завантажуємо номер рядка
+    call print_word ; Виводимо номер рядка
+    mov dx, offset newline ; Перехід на новий рядок
+    mov ah, 09h
+    int 21h
+    add si, 4 ; Переходимо до наступного елементу масиву
+    loop print_loop ; Повторюємо цикл для інших елементів масиву
+print_done:
+    ret
+
+print_sorted_results endp
+
 print_word proc
+    ; Виведення числа на екран
     push ax
     push bx
     push cx
     push dx
     
-    ; Конвертуємо кількість входжень у цифри та виводимо їх
-    mov ax, count
-    mov bx, 10
+    mov bx, 10 ; Дільник
     mov cx, 0 ; Лічильник цифр
+    
 count_loop:
     xor dx, dx
     div bx ; Ділимо ax на 10
@@ -155,40 +181,16 @@ count_loop:
     inc cx ; Збільшуємо лічильник цифр
     test ax, ax
     jnz count_loop ; Повторюємо, поки ax != 0
-print_count:
+
+print_loop:
     pop dx ; Відновлюємо цифру зі стеку
     mov ah, 02h
     int 21h ; Виводимо цифру
-    loop print_count
+    loop print_loop
 
-    ; Виводимо пробіл
+    ; Виведення пробілу
     mov dl, ' '
     mov ah, 02h
-    int 21h
-    
-    ; Конвертуємо індекс рядка у цифри та виводимо їх
-    mov ax, count
-    mov bx, 10
-    mov cx, 0 ; Лічильник цифр
-line_index_loop:
-    xor dx, dx
-    div bx ; Ділимо ax на 10
-    add dl, '0' ; Конвертуємо залишок у символ
-    push dx ; Зберігаємо цифру у стеку
-    inc cx ; Збільшуємо лічильник цифр
-    test ax, ax
-    jnz line_index_loop ; Повторюємо, поки ax != 0
-print_index:
-    pop dx ; Відновлюємо цифру зі стеку
-    mov ah, 02h
-    int 21h ; Виводимо цифру
-    loop print_index
-
-    ; Виводимо переведення строки
-    mov dl, 0Dh
-    mov ah, 02h
-    int 21h
-    mov dl, 0Ah
     int 21h
     
     pop dx
@@ -196,6 +198,7 @@ print_index:
     pop bx
     pop ax
     ret
+
 print_word endp
 
 main endp
